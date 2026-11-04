@@ -1,0 +1,9 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tallybird
+      POSTGRES_PASSWORD: tallybird
+      POSTGRES_DB: tallybird
+    ports:
+      - "5432:5432"

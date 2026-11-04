@@ -1,0 +1,20 @@
+{
+  "name": "tallybird",
+  "version": "0.9.2",
+  "private": true,
+  "description": "Invoicing for small teams: customers, billing runs, payments, shared documents.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "setup": "npm run migrate && npm run seed"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "cookie-parser": "1.4.7",
+    "express": "4.21.2",
+    "pg": "8.13.1"
+  }
+}
