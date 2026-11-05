@@ -1,7 +1,7 @@
 import express from 'express';
 import { one, q } from '../db.js';
 import { requireTeam } from '../auth.js';
-import { ReportRefused, reportsLeft, startReport, stopReport } from '../reports.js';
+import { PREVIEW_LINES, ReportRefused, reportsLeft, startReport, stopReport } from '../reports.js';
 
 export const reportsApi = express.Router();
 reportsApi.use(requireTeam);
@@ -9,7 +9,7 @@ reportsApi.use(requireTeam);
 reportsApi.param('id', (_req, res, next, id) => (/^\d{1,9}$/.test(id) ? next() : res.status(404).json({ error: 'Not found' })));
 
 reportsApi.get('/', async (req, res) => {
-  const reports = await q('SELECT id, period, scope, state, total, done, started_at, finished_at FROM reports WHERE team_id = $1 ORDER BY id DESC LIMIT 25', [req.team.id]);
+  const reports = await q('SELECT id, period, scope, skip, state, total, done, started_at, finished_at FROM reports WHERE team_id = $1 ORDER BY id DESC LIMIT 25', [req.team.id]);
   res.json({ reports, ...(await reportsLeft(req.team.id)) });
 });
 
@@ -23,7 +23,7 @@ reportsApi.post('/', async (req, res) => {
   const period = String(req.body?.period ?? new Date().toISOString().slice(0, 7));
   if (!/^\d{4}-\d{2}$/.test(period)) return res.status(400).json({ error: 'Period looks like 2026-11' });
   try {
-    const report = await startReport(req.team, req.user, period, req.body?.scope === 'rest' ? 'rest' : 'all');
+    const report = await startReport(req.team, req.user, period, req.body?.scope === 'rest' ? 'rest' : 'all', PREVIEW_LINES);
     res.status(202).json({ report });
   } catch (e) {
     if (e instanceof ReportRefused) return res.status(e.status).json({ error: e.message });

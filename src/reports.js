@@ -20,11 +20,11 @@ export async function reportsLeft(teamId) {
   return { used, left: Math.max(0, REPORTS_PER_MONTH - used), perMonth: REPORTS_PER_MONTH };
 }
 
-/** Builds a seat report a customer at a time: every active customer, or the ones after the first PREVIEW_LINES. */
+/** Builds a seat report a customer at a time: every active customer, or the ones after the first `skip`. */
 async function buildReport(report) {
   try {
     const customers = await q('SELECT name, seats, price_cents FROM customers WHERE team_id = $1 AND active ORDER BY id', [report.team_id]);
-    const list = report.scope === 'rest' ? customers.slice(PREVIEW_LINES) : customers;
+    const list = report.scope === 'rest' ? customers.slice(report.skip) : customers;
     await q('UPDATE reports SET total = $2 WHERE id = $1', [report.id, list.length]);
     const lines = [];
     for (const c of list) {
@@ -42,14 +42,14 @@ async function buildReport(report) {
 }
 
 /** Starts a report in this process and answers at once; the Reports page follows its progress. One at a time per team. */
-export async function startReport(team, user, period, scope = 'all') {
+export async function startReport(team, user, period, scope = 'all', skip = 0) {
   const active = await one(`SELECT id, state FROM reports WHERE team_id = $1 AND state IN ('running', 'pending')`, [team.id]);
   if (active) throw new ReportRefused(`Report ${active.id} is still ${active.state === 'pending' ? 'queued' : 'running'}`);
   if ((await reportsLeft(team.id)).left === 0) throw new ReportRefused(`Your team has used its ${REPORTS_PER_MONTH} reports for this month`, 402);
   let report;
   try {
-    report = await one(`INSERT INTO reports (team_id, created_by, period, scope, state, started_at) VALUES ($1,$2,$3,$4,'running',$5) RETURNING *`,
-      [team.id, user.id, period, scope, now()]);
+    report = await one(`INSERT INTO reports (team_id, created_by, period, scope, skip, state, started_at) VALUES ($1,$2,$3,$4,$5,'running',$6) RETURNING *`,
+      [team.id, user.id, period, scope, scope === 'rest' ? skip : 0, now()]);
   } catch (e) {
     if (e.code === '23505') throw new ReportRefused('Another report is already running');
     throw e;

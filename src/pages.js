@@ -1,7 +1,7 @@
 import express from 'express';
 import { one, q } from './db.js';
 import { requireTeam, requireUser, requireAdmin } from './auth.js';
-import { PREVIEW_LINES, reportsLeft } from './reports.js';
+import { PREVIEW_LINES, ReportRefused, reportsLeft, startReport } from './reports.js';
 import { activityGroups, runningNow, runsPanel, totalsPanel } from './activity.js';
 
 export const pages = express.Router();
@@ -91,13 +91,29 @@ pages.get('/reports', requireTeam, async (req, res) => {
   const start = active ? `<p>Report #${active.id} is ${reportWord[active.state].toLowerCase()}. One report runs at a time.</p>`
     : `<form data-api="POST /api/reports" data-then="/reports"><label>Period <input name="period" value="${new Date().toISOString().slice(0, 7)}" pattern="\\d{4}-\\d{2}" required></label><button type="submit">Start report</button></form>`;
   const latest = reports.find((r) => r.state === 'done' && r.scope === 'all');
-  const rest = latest && reports.find((r) => r.state === 'done' && r.scope === 'rest' && r.period === latest.period && r.id > latest.id);
+  const rest = latest && reports.find((r) => r.state === 'done' && r.scope === 'rest' && r.skip === PREVIEW_LINES && r.period === latest.period && r.id > latest.id);
   const more = latest ? latest.lines.length - PREVIEW_LINES : 0;
   const shown = !latest ? '<p>No reports yet.</p>' : `<div class="summary">Report #${latest.id} for ${esc(latest.period)} lists ${latest.lines.length} customers${more > 0 && !rest ? `; here are the first ${PREVIEW_LINES}. <form class="inline" data-api="POST /api/reports" data-then="/reports"><input type="hidden" name="period" value="${esc(latest.period)}"><input type="hidden" name="scope" value="rest"><button type="submit" class="textlink">See the rest · ${more} more</button></form>` : '.'}</div>${seatLines(rest ? [...latest.lines.slice(0, PREVIEW_LINES), ...rest.lines] : latest.lines.slice(0, PREVIEW_LINES))}`;
+  // A report stopped part-way, unless the rest of it has been started since.
+  const cut = reports.find((r) => r.state === 'stopped' && r.done < r.total);
+  const resumed = cut && reports.some((r) => r.scope === 'rest' && r.skip === cut.done && r.period === cut.period && r.id > cut.id);
+  const partial = cut && !resumed ? `<div class="summary">Report #${cut.id} for ${esc(cut.period)} was stopped after ${cut.done} of ${cut.total} customers. <form class="inline" method="post" action="/reports/${cut.id}/rest"><button type="submit" class="textlink">Check the rest · ${cut.total - cut.done} more</button></form></div>` : '';
   const stop = (r) => (r.state === 'running' ? `<button data-post="/api/reports/${r.id}/stop" data-then="/reports">Stop</button>` : '');
   res.send(shell(req, 'Reports', `<p>A seat report lists every active customer with its seats and price per seat. Your team can start ${perMonth} reports a month: ${used} used, ${left} left this month.</p>${start}
-  <h2>Latest report</h2>${shown}
-  <h2>All reports</h2><table data-refresh="${reports.some((r) => r.state === 'running') ? 3000 : ''}"><thead><tr><th>Report</th><th>Period</th><th>Customers</th><th>Status</th><th>Progress</th><th>Started</th><th></th></tr></thead><tbody>${reports.map((r) => `<tr><td>#${r.id}</td><td>${esc(r.period)}</td><td>${r.scope === 'rest' ? `After the first ${PREVIEW_LINES}` : 'All'}</td><td>${reportWord[r.state]}</td><td>${r.done} of ${r.total}</td><td>${new Date(r.started_at).toLocaleString('en-US')}</td><td>${stop(r)}</td></tr>`).join('')}</tbody></table>`));
+  <h2>Latest report</h2>${shown}${partial}
+  <h2>All reports</h2><table data-refresh="${reports.some((r) => r.state === 'running') ? 3000 : ''}"><thead><tr><th>Report</th><th>Period</th><th>Customers</th><th>Status</th><th>Progress</th><th>Started</th><th></th></tr></thead><tbody>${reports.map((r) => `<tr><td>#${r.id}</td><td>${esc(r.period)}</td><td>${r.scope === 'rest' ? `After the first ${r.skip}` : 'All'}</td><td>${reportWord[r.state]}</td><td>${r.done} of ${r.total}</td><td>${new Date(r.started_at).toLocaleString('en-US')}</td><td>${stop(r)}</td></tr>`).join('')}</tbody></table>`));
+});
+
+pages.post('/reports/:id/rest', requireTeam, async (req, res) => {
+  const cut = await one(`SELECT * FROM reports WHERE id = $1 AND team_id = $2 AND state = 'stopped'`, [req.params.id, req.team.id]);
+  if (!cut) return res.status(404).send(shell(req, 'Not found', '<p>No such stopped report. <a href="/reports">Back to reports</a></p>'));
+  try {
+    await startReport(req.team, req.user, cut.period, 'rest', cut.done);
+  } catch (e) {
+    if (e instanceof ReportRefused) return res.status(e.status).send(shell(req, 'Reports', `<p>${esc(e.message)}. <a href="/reports">Back to reports</a></p>`));
+    throw e;
+  }
+  res.redirect(303, '/reports');
 });
 
 const runWord = { running: 'Preparing', done: 'Ready', cancelled: 'Cancelled', failed: 'Failed' };

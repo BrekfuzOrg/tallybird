@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS reports (
   finished_at timestamptz
 );
 CREATE UNIQUE INDEX IF NOT EXISTS reports_one_at_a_time ON reports (team_id) WHERE state IN ('running', 'pending');
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS skip integer NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS statement_runs (
   id serial PRIMARY KEY,
   team_id integer NOT NULL REFERENCES teams(id),

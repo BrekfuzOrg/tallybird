@@ -36,5 +36,8 @@ for (const [t, owner] of [[northwind, keen], [bluepeak, eren]]) {
   await q(`INSERT INTO statement_runs (team_id, created_by, period, state, total, done, statements, started_at, finished_at) VALUES ($1,$2,$3,'done',$4,$4,$5,$6,$6)`,
     [t.id, owner.id, period, cs.length, JSON.stringify(cs.map((c) => ({ customer: c.name, openInvoices: 0, dueCents: 0 }))), at(19)]);
 }
+{ const cs = await q('SELECT name, seats, price_cents FROM customers WHERE team_id = $1 AND active ORDER BY id', [northwind.id]); const done = cs.slice(0, 16);
+  await q(`INSERT INTO reports (team_id, created_by, period, scope, state, total, done, lines, stop_requested_at, started_at, finished_at) VALUES ($1,$2,$3,'all','stopped',$4,$5,$6,$7,$7,$7)`,
+    [northwind.id, keen.id, at(12).toISOString().slice(0, 7), cs.length, done.length, JSON.stringify(done.map((c) => ({ customer: c.name, seats: c.seats, priceCents: c.price_cents }))), at(12)]); }
 console.log('demo data ready');
 await pool.end();
