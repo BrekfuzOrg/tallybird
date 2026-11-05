@@ -36,6 +36,11 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
 - **Pricing**: seats x price per seat, with a 10% volume discount at 100 seats or more, then 8% tax on the discounted amount.
 - **Payments**: *Pay now* on an open invoice charges the customer once. The invoice shows *Processing* until the gateway
   settles it (about 20 seconds), then *Paid*. Send an `Idempotency-Key` header when calling the API.
+- **Attachments**: anyone on the team can attach a file to one of the team's invoices from the invoice page, up to 5 MB
+  a file. A CSV of line items (a header row with `description`, `quantity` and `amount`, as a spreadsheet saves it) adds its
+  rows to the invoice page as line items. A PDF is kept as the invoice's receipt: Tallybird does not read inside a PDF, so a
+  receipt adds no line items. An empty file, a file over 5 MB, or any other kind of file is refused with a message. Each upload
+  is kept as its own attachment.
 - **Documents** live with the team. A document is private to its author until the author shares it, either with named
   teammates or with the whole team; a document shared with the team shows up in every teammate's Documents list.
   Comments are open to everyone who can see the document.
@@ -49,5 +54,6 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
 JSON under `/api`, signed in with the session cookie from `POST /api/login` (`{"email","password"}`).
 `POST /api/signup`, `GET /api/me`, `GET/PATCH /api/team`, `GET/POST /api/team/invites`, `GET/POST /api/customers`,
 `PATCH /api/customers/:id`, `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices/:id/pay`,
+`POST /api/invoices/:id/attachments` (multipart form, one `file` field), `GET /api/invoices/:id/attachments/:aid`,
 `GET/POST /api/billing-runs`, `GET /api/billing-runs/:id`, `GET/POST /api/documents`, `GET/PATCH/DELETE /api/documents/:id`,
 `POST /api/documents/:id/share`, `POST /api/documents/:id/comments`.

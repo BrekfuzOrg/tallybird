@@ -7,6 +7,7 @@ pages.param('id', (_req, res, next, id) => (/^\d{1,9}$/.test(id) ? next() : res.
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (cents) => `$${(Number(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const kb = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 const statusWord = { open: 'Open', processing: 'Processing', paid: 'Paid', running: 'Running', done: 'Done', failed: 'Failed' };
 
 function shell(req, title, body, { nav = true } = {}) {
@@ -52,8 +53,12 @@ pages.get('/invoices/:id', requireUser, async (req, res) => {
   if (!i) return res.status(404).send(shell(req, 'Not found', '<p>No such invoice. <a href="/invoices">Back to invoices</a></p>'));
   const charges = await q('SELECT * FROM charges WHERE invoice_id = $1 ORDER BY id', [i.id]);
   const pay = req.team?.role === 'owner' && req.team.id === i.team_id && i.status !== 'paid' ? `<button data-post="/api/invoices/${i.id}/pay" data-then="/invoices/${i.id}">Pay now</button>` : '';
+  const files = await q('SELECT id, filename, kind, bytes, line_items FROM invoice_attachments WHERE invoice_id = $1 ORDER BY id', [i.id]);
+  const items = (list) => (list.length ? `<table><thead><tr><th>Line item</th><th>Quantity</th><th>Amount</th></tr></thead><tbody>${list.slice(0, 50).map((x) => `<tr><td>${esc(x.description)}</td><td>${esc(x.quantity)}</td><td>${money(x.amountCents)}</td></tr>`).join('')}</tbody></table>${list.length > 50 ? `<p>and ${list.length - 50} more line items</p>` : ''}` : '<p>No line items.</p>');
+  const attach = req.team?.id === i.team_id ? `<form data-upload="/api/invoices/${i.id}/attachments" data-then="/invoices/${i.id}"><label>Attach a CSV of line items or a PDF receipt (up to 5 MB) <input name="file" type="file" accept=".csv,.pdf,text/csv,application/pdf" required></label><button type="submit">Attach file</button></form>` : '';
+  const attachments = `<h2>Attachments</h2>${files.length ? `<ul class="attachments">${files.map((f) => `<li><a href="/api/invoices/${i.id}/attachments/${f.id}">${esc(f.filename)}</a> · ${f.kind === 'csv' ? 'Line items (CSV)' : 'Receipt (PDF)'} · ${kb(f.bytes)}${f.kind === 'csv' ? items(f.line_items) : ''}</li>`).join('')}</ul>` : '<p>No attachments yet.</p>'}${attach}`;
   res.send(shell(req, `Invoice ${i.number}`, `<dl><dt>Customer</dt><dd>${esc(i.customer_name)} (${esc(i.customer_email)})</dd><dt>Seats</dt><dd>${i.seats} at ${money(i.unit_cents)}</dd><dt>Discount</dt><dd>${money(i.discount_cents)}</dd><dt>Tax</dt><dd>${money(i.tax_cents)}</dd><dt>Total</dt><dd>${money(i.total_cents)}</dd><dt>Status</dt><dd>${statusWord[i.status]}</dd></dl>${pay}
-  <h2>Charges</h2>${charges.length ? `<ul>${charges.map((c) => `<li>${money(c.amount_cents)} on ${new Date(c.created_at).toLocaleString('en-US')} (${esc(c.gateway_ref)})</li>`).join('')}</ul>` : '<p>No charges yet.</p>'}<p><a href="/invoices">Back to invoices</a></p>`));
+  <h2>Charges</h2>${charges.length ? `<ul>${charges.map((c) => `<li>${money(c.amount_cents)} on ${new Date(c.created_at).toLocaleString('en-US')} (${esc(c.gateway_ref)})</li>`).join('')}</ul>` : '<p>No charges yet.</p>'}${attachments}<p><a href="/invoices">Back to invoices</a></p>`));
 });
 
 pages.get('/documents', requireTeam, async (req, res) => {

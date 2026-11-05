@@ -28,4 +28,15 @@ document.addEventListener('click', async (e) => {
     if (b.dataset.then) setTimeout(() => { location.href = b.dataset.then; }, 600);
   } catch (err) { flash(err.message, true); }
 });
+document.addEventListener('submit', async (e) => {
+  const form = e.target.closest('form[data-upload]'); if (!form) return;
+  e.preventDefault();
+  try {
+    const res = await fetch(form.dataset.upload, { method: 'POST', body: new FormData(form), credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `That did not work (${res.status})`);
+    flash(data.message || 'Attached');
+    if (form.dataset.then) setTimeout(() => { location.href = form.dataset.then; }, 600);
+  } catch (err) { flash(err.message, true); }
+});
 const r = document.querySelector('[data-refresh]'); if (r && r.dataset.refresh) setTimeout(() => location.reload(), Number(r.dataset.refresh));

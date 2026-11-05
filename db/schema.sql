@@ -91,3 +91,14 @@ CREATE TABLE IF NOT EXISTS document_shares (
   user_id integer NOT NULL REFERENCES users(id),
   PRIMARY KEY (document_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS invoice_attachments (
+  id serial PRIMARY KEY,
+  invoice_id integer NOT NULL REFERENCES invoices(id),
+  uploaded_by integer NOT NULL REFERENCES users(id),
+  filename text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('csv', 'pdf')),
+  bytes integer NOT NULL,
+  content bytea NOT NULL,
+  line_items jsonb NOT NULL DEFAULT '[]',
+  created_at timestamptz NOT NULL
+);
