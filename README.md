@@ -41,6 +41,12 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
   rows to the invoice page as line items. A PDF is kept as the invoice's receipt: Tallybird does not read inside a PDF, so a
   receipt adds no line items. An empty file, a file over 5 MB, or any other kind of file is refused with a message. Each upload
   is kept as its own attachment.
+- **Reports**: anyone on the team can start a seat report from the Reports page: one line per active customer, with its seats
+  and price per seat. The page shows the latest report. Each team can start 10 reports a calendar month (a stopped report still
+  counts), and the Reports page says how many are left. One report runs at a time; *Stop* ends a running report, and you can
+  start the next one right away.
+- **Statements**: *Prepare statements* on the Statements page makes one statement per active customer: its open invoices up
+  to the period and the amount due. Statements are free. One run at a time; *Cancel* ends a run at once.
 - **Documents** live with the team. A document is private to its author until the author shares it, either with named
   teammates or with the whole team; a document shared with the team shows up in every teammate's Documents list.
   Comments are open to everyone who can see the document.
@@ -56,4 +62,5 @@ JSON under `/api`, signed in with the session cookie from `POST /api/login` (`{"
 `PATCH /api/customers/:id`, `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices/:id/pay`,
 `POST /api/invoices/:id/attachments` (multipart form, one `file` field), `GET /api/invoices/:id/attachments/:aid`,
 `GET/POST /api/billing-runs`, `GET /api/billing-runs/:id`, `GET/POST /api/documents`, `GET/PATCH/DELETE /api/documents/:id`,
-`POST /api/documents/:id/share`, `POST /api/documents/:id/comments`.
+`POST /api/documents/:id/share`, `POST /api/documents/:id/comments`, `GET/POST /api/reports`, `GET /api/reports/:id`,
+`POST /api/reports/:id/stop`, `GET/POST /api/statements`, `GET /api/statements/:id`, `POST /api/statements/:id/cancel`.

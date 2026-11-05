@@ -3,6 +3,8 @@ import cookieParser from 'cookie-parser';
 import { pool, q } from './db.js';
 import { loadUser } from './auth.js';
 import { startHousekeeping } from './jobs.js';
+import { startReportQueue } from './reports.js';
+import { startStatementQueue } from './statements.js';
 import { authApi } from './routes/auth.js';
 import { teamApi } from './routes/team.js';
 import { customersApi } from './routes/customers.js';
@@ -10,6 +12,8 @@ import { invoicesApi } from './routes/invoices.js';
 import { billingApi } from './routes/billing.js';
 import { documentsApi } from './routes/documents.js';
 import { adminApi } from './routes/admin.js';
+import { reportsApi } from './routes/reports.js';
+import { statementsApi } from './routes/statements.js';
 import { pages } from './pages.js';
 
 const app = express();
@@ -40,6 +44,8 @@ app.use('/api/invoices', wrap(invoicesApi));
 app.use('/api/billing-runs', wrap(billingApi));
 app.use('/api/documents', wrap(documentsApi));
 app.use('/api/admin', wrap(adminApi));
+app.use('/api/reports', wrap(reportsApi));
+app.use('/api/statements', wrap(statementsApi));
 app.use('/', wrap(pages));
 
 app.use((err, _req, res, _next) => {
@@ -52,5 +58,7 @@ const port = Number(process.env.PORT ?? 3000);
 const server = app.listen(port, () => {
   console.log(`tallybird listening on ${port}`);
   startHousekeeping();
+  startReportQueue();
+  startStatementQueue();
 });
 process.on('SIGTERM', () => server.close(() => pool.end().then(() => process.exit(0))));

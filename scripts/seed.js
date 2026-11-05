@@ -28,5 +28,13 @@ const doc = (t, a, title, body, daysAgo) => q('INSERT INTO documents (team_id, a
 await doc(northwind, keen, 'Collections checklist', 'Who to call when an invoice is 30 days late.', 20);
 await doc(northwind, bree, 'Onboarding notes', 'What we ask a new customer in the first week.', 12);
 await doc(bluepeak, eren, 'Price changes 2027', 'Draft of the new seat prices for next year.', 9);
+// Each team's seat report and statements from a few weeks ago.
+for (const [t, owner] of [[northwind, keen], [bluepeak, eren]]) {
+  const cs = await q('SELECT name, seats, price_cents FROM customers WHERE team_id = $1 AND active ORDER BY id', [t.id]); const period = at(20).toISOString().slice(0, 7);
+  await q(`INSERT INTO reports (team_id, created_by, period, scope, state, total, done, lines, started_at, finished_at) VALUES ($1,$2,$3,'all','done',$4,$4,$5,$6,$6)`,
+    [t.id, owner.id, period, cs.length, JSON.stringify(cs.map((c) => ({ customer: c.name, seats: c.seats, priceCents: c.price_cents }))), at(20)]);
+  await q(`INSERT INTO statement_runs (team_id, created_by, period, state, total, done, statements, started_at, finished_at) VALUES ($1,$2,$3,'done',$4,$4,$5,$6,$6)`,
+    [t.id, owner.id, period, cs.length, JSON.stringify(cs.map((c) => ({ customer: c.name, openInvoices: 0, dueCents: 0 }))), at(19)]);
+}
 console.log('demo data ready');
 await pool.end();

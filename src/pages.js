@@ -1,6 +1,7 @@
 import express from 'express';
 import { one, q } from './db.js';
 import { requireTeam, requireUser, requireAdmin } from './auth.js';
+import { PREVIEW_LINES, reportsLeft } from './reports.js';
 
 export const pages = express.Router();
 pages.param('id', (_req, res, next, id) => (/^\d{1,9}$/.test(id) ? next() : res.redirect('/')));
@@ -11,7 +12,7 @@ const kb = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1
 const statusWord = { open: 'Open', processing: 'Processing', paid: 'Paid', running: 'Running', done: 'Done', failed: 'Failed' };
 
 function shell(req, title, body, { nav = true } = {}) {
-  const links = req.team ? `<a href="/customers">Customers</a><a href="/billing">Billing</a><a href="/invoices">Invoices</a><a href="/documents">Documents</a><a href="/team">Team</a><a href="/settings">Settings</a>` : '';
+  const links = req.team ? `<a href="/customers">Customers</a><a href="/billing">Billing</a><a href="/invoices">Invoices</a><a href="/reports">Reports</a><a href="/statements">Statements</a><a href="/documents">Documents</a><a href="/team">Team</a><a href="/settings">Settings</a>` : '';
   const who = req.user ? `<span class="who">${esc(req.user.name)}${req.team ? ` · ${esc(req.team.name)}` : ''}</span><button data-post="/api/logout" data-then="/login">Sign out</button>` : `<a href="/login">Sign in</a>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · Tallybird</title><link rel="stylesheet" href="/app.css"></head>
 <body>${nav ? `<header><a class="brand" href="/">Tallybird</a><nav>${links}</nav><div class="right">${who}</div></header>` : ''}<main><div id="flash" role="status"></div><h1>${esc(title)}</h1>${body}</main><script src="/app.js"></script></body></html>`;
@@ -77,6 +78,45 @@ pages.get('/documents/:id', requireTeam, async (req, res) => {
   <button data-post="/api/documents/${d.id}" data-method="DELETE" data-then="/documents">Move to trash</button>` : `<p>${esc(d.body)}</p>`;
   res.send(shell(req, d.title, `${d.sharedWithTeam ? '<p class="badge">Shared with team</p>' : ''}${mine}<h2>Comments</h2><ul>${d.comments.map((c) => `<li><b>${esc(c.author)}</b>: ${esc(c.text)}</li>`).join('') || '<li>No comments yet.</li>'}</ul>
   <form data-api="POST /api/documents/${d.id}/comments" data-then="/documents/${d.id}"><label>Add a comment <textarea name="text" rows="2" required></textarea></label><button type="submit">Comment</button></form><p><a href="/documents">Back to documents</a></p>`));
+});
+
+const reportWord = { running: 'Running', pending: 'Queued', done: 'Done', stopped: 'Stopped', failed: 'Failed' };
+const seatLines = (lines) => `<table><thead><tr><th>Customer</th><th>Seats</th><th>Price per seat</th></tr></thead><tbody>${lines.map((l) => `<tr><td>${esc(l.customer)}</td><td>${l.seats}</td><td>${money(l.priceCents)}</td></tr>`).join('')}</tbody></table>`;
+
+pages.get('/reports', requireTeam, async (req, res) => {
+  const reports = await q('SELECT * FROM reports WHERE team_id = $1 ORDER BY id DESC LIMIT 25', [req.team.id]);
+  const { used, left, perMonth } = await reportsLeft(req.team.id);
+  const active = reports.find((r) => r.state === 'running' || r.state === 'pending');
+  const start = active ? `<p>Report #${active.id} is ${reportWord[active.state].toLowerCase()}. One report runs at a time.</p>`
+    : `<form data-api="POST /api/reports" data-then="/reports"><label>Period <input name="period" value="${new Date().toISOString().slice(0, 7)}" pattern="\\d{4}-\\d{2}" required></label><button type="submit">Start report</button></form>`;
+  const latest = reports.find((r) => r.state === 'done' && r.scope === 'all');
+  const rest = latest && reports.find((r) => r.state === 'done' && r.scope === 'rest' && r.period === latest.period && r.id > latest.id);
+  const more = latest ? latest.lines.length - PREVIEW_LINES : 0;
+  const shown = !latest ? '<p>No reports yet.</p>' : `<div class="summary">Report #${latest.id} for ${esc(latest.period)} lists ${latest.lines.length} customers${more > 0 && !rest ? `; here are the first ${PREVIEW_LINES}. <form class="inline" data-api="POST /api/reports" data-then="/reports"><input type="hidden" name="period" value="${esc(latest.period)}"><input type="hidden" name="scope" value="rest"><button type="submit" class="textlink">See the rest · ${more} more</button></form>` : '.'}</div>${seatLines(rest ? [...latest.lines.slice(0, PREVIEW_LINES), ...rest.lines] : latest.lines.slice(0, PREVIEW_LINES))}`;
+  const stop = (r) => (r.state === 'running' ? `<button data-post="/api/reports/${r.id}/stop" data-then="/reports">Stop</button>` : '');
+  res.send(shell(req, 'Reports', `<p>A seat report lists every active customer with its seats and price per seat. Your team can start ${perMonth} reports a month: ${used} used, ${left} left this month.</p>${start}
+  <h2>Latest report</h2>${shown}
+  <h2>All reports</h2><table data-refresh="${reports.some((r) => r.state === 'running') ? 3000 : ''}"><thead><tr><th>Report</th><th>Period</th><th>Customers</th><th>Status</th><th>Progress</th><th>Started</th><th></th></tr></thead><tbody>${reports.map((r) => `<tr><td>#${r.id}</td><td>${esc(r.period)}</td><td>${r.scope === 'rest' ? `After the first ${PREVIEW_LINES}` : 'All'}</td><td>${reportWord[r.state]}</td><td>${r.done} of ${r.total}</td><td>${new Date(r.started_at).toLocaleString('en-US')}</td><td>${stop(r)}</td></tr>`).join('')}</tbody></table>`));
+});
+
+const runWord = { running: 'Preparing', done: 'Ready', cancelled: 'Cancelled', failed: 'Failed' };
+
+pages.get('/statements', requireTeam, async (req, res) => {
+  const runs = await q('SELECT id, period, state, total, done, started_at, jsonb_array_length(statements) AS ready FROM statement_runs WHERE team_id = $1 ORDER BY id DESC LIMIT 25', [req.team.id]);
+  const active = runs.find((r) => r.state === 'running');
+  const start = active ? `<p>Statements run #${active.id} is being prepared. One run at a time.</p>`
+    : `<form data-api="POST /api/statements" data-then="/statements"><label>Period <input name="period" value="${new Date().toISOString().slice(0, 7)}" pattern="\\d{4}-\\d{2}" required></label><button type="submit">Prepare statements</button></form>`;
+  const latest = runs.find((r) => r.state === 'done');
+  const ready = latest ? `<p>Statements for ${esc(latest.period)} are ready for ${latest.ready} customers. <a href="/statements/${latest.id}">See all ${latest.ready}</a></p>` : '<p>No statements yet.</p>';
+  const cancel = (r) => (r.state === 'running' ? `<button data-post="/api/statements/${r.id}/cancel" data-then="/statements">Cancel</button>` : '');
+  res.send(shell(req, 'Statements', `<p>A statement for each active customer: its open invoices and the amount due. Statements are free.</p>${start}${ready}
+  <h2>All statement runs</h2><table data-refresh="${active ? 3000 : ''}"><thead><tr><th>Run</th><th>Period</th><th>Status</th><th>Progress</th><th>Started</th><th></th></tr></thead><tbody>${runs.map((r) => `<tr><td>#${r.id}</td><td>${esc(r.period)}</td><td>${runWord[r.state]}</td><td>${r.done} of ${r.total}</td><td>${new Date(r.started_at).toLocaleString('en-US')}</td><td>${cancel(r)}</td></tr>`).join('')}</tbody></table>`));
+});
+
+pages.get('/statements/:id', requireTeam, async (req, res) => {
+  const run = await one('SELECT * FROM statement_runs WHERE id = $1 AND team_id = $2', [req.params.id, req.team.id]);
+  if (!run) return res.status(404).send(shell(req, 'Not found', '<p>No such statements run. <a href="/statements">Back to statements</a></p>'));
+  res.send(shell(req, `Statements for ${run.period}`, `<table><thead><tr><th>Customer</th><th>Open invoices</th><th>Amount due</th></tr></thead><tbody>${run.statements.map((x) => `<tr><td>${esc(x.customer)}</td><td>${x.openInvoices}</td><td>${money(x.dueCents)}</td></tr>`).join('')}</tbody></table><p><a href="/statements">Back to statements</a></p>`));
 });
 
 pages.get('/team', requireTeam, async (req, res) => {

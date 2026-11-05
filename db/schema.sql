@@ -102,3 +102,31 @@ CREATE TABLE IF NOT EXISTS invoice_attachments (
   line_items jsonb NOT NULL DEFAULT '[]',
   created_at timestamptz NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reports (
+  id serial PRIMARY KEY,
+  team_id integer NOT NULL REFERENCES teams(id),
+  created_by integer NOT NULL REFERENCES users(id),
+  period text NOT NULL,
+  scope text NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'rest')),
+  state text NOT NULL CHECK (state IN ('running', 'pending', 'done', 'stopped', 'failed')),
+  total integer NOT NULL DEFAULT 0,
+  done integer NOT NULL DEFAULT 0,
+  lines jsonb NOT NULL DEFAULT '[]',
+  stop_requested_at timestamptz,
+  started_at timestamptz NOT NULL,
+  finished_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS reports_one_at_a_time ON reports (team_id) WHERE state IN ('running', 'pending');
+CREATE TABLE IF NOT EXISTS statement_runs (
+  id serial PRIMARY KEY,
+  team_id integer NOT NULL REFERENCES teams(id),
+  created_by integer NOT NULL REFERENCES users(id),
+  period text NOT NULL,
+  state text NOT NULL CHECK (state IN ('running', 'done', 'cancelled', 'failed')),
+  total integer NOT NULL DEFAULT 0,
+  done integer NOT NULL DEFAULT 0,
+  statements jsonb NOT NULL DEFAULT '[]',
+  started_at timestamptz NOT NULL,
+  finished_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS statement_runs_one_at_a_time ON statement_runs (team_id) WHERE state = 'running';
