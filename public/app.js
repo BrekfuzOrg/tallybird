@@ -40,3 +40,15 @@ document.addEventListener('submit', async (e) => {
   } catch (err) { flash(err.message, true); }
 });
 const r = document.querySelector('[data-refresh]'); if (r && r.dataset.refresh) setTimeout(() => location.reload(), Number(r.dataset.refresh));
+// Live lists while a page is open, every 5 seconds: the activity feed gets the newest group as it comes in; "Running now" is read again.
+const entry = (text) => { const li = document.createElement('li'); li.textContent = text; return li; };
+const group = (g) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = g.title; const ul = document.createElement('ul'); ul.append(...g.items.map(entry)); li.append(b, ul); return li; };
+const every5s = (url, then) => setInterval(() => fetch(url, { credentials: 'same-origin' }).then((x) => (x.ok ? x.json() : null)).then((d) => d && then(d)).catch(() => {}), 5000);
+const feed = document.querySelector('[data-feed]'); if (feed) every5s(feed.dataset.feed, (d) => { if (d.latest) feed.append(group(d.latest)); });
+const running = document.querySelector('[data-running]'); if (running) every5s(running.dataset.running, (d) => running.replaceChildren(...(d.running.length ? d.running : ['Nothing is running.']).map(entry)));
+// Live panels, read again every 5 seconds; a section the person opened stays open.
+for (const panel of document.querySelectorAll('[data-panel]')) every5s(panel.dataset.panel, (d) => {
+  const open = [...panel.querySelectorAll('details[open][id]')].map((x) => x.id);
+  panel.innerHTML = d.html;
+  for (const id of open) document.getElementById(id)?.setAttribute('open', '');
+});

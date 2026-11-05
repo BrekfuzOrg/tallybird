@@ -14,6 +14,7 @@ import { documentsApi } from './routes/documents.js';
 import { adminApi } from './routes/admin.js';
 import { reportsApi } from './routes/reports.js';
 import { statementsApi } from './routes/statements.js';
+import { activityApi } from './routes/activity.js';
 import { pages } from './pages.js';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/documents', wrap(documentsApi));
 app.use('/api/admin', wrap(adminApi));
 app.use('/api/reports', wrap(reportsApi));
 app.use('/api/statements', wrap(statementsApi));
+app.use('/api/activity', wrap(activityApi));
 app.use('/', wrap(pages));
 
 app.use((err, _req, res, _next) => {

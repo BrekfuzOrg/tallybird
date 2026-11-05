@@ -47,6 +47,9 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
   start the next one right away.
 - **Statements**: *Prepare statements* on the Statements page makes one statement per active customer: its open invoices up
   to the period and the amount due. Statements are free. One run at a time; *Cancel* ends a run at once.
+- **Activity**: the Activity page lists what happened on the team (customers added, invoices made, payments, reports and
+  statements), oldest first, grouped by minute, and keeps itself up to date while it is open, with what is running now,
+  the team's customers and amounts due, and its reports and statements.
 - **Documents** live with the team. A document is private to its author until the author shares it, either with named
   teammates or with the whole team; a document shared with the team shows up in every teammate's Documents list.
   Comments are open to everyone who can see the document.
@@ -63,4 +66,5 @@ JSON under `/api`, signed in with the session cookie from `POST /api/login` (`{"
 `POST /api/invoices/:id/attachments` (multipart form, one `file` field), `GET /api/invoices/:id/attachments/:aid`,
 `GET/POST /api/billing-runs`, `GET /api/billing-runs/:id`, `GET/POST /api/documents`, `GET/PATCH/DELETE /api/documents/:id`,
 `POST /api/documents/:id/share`, `POST /api/documents/:id/comments`, `GET/POST /api/reports`, `GET /api/reports/:id`,
-`POST /api/reports/:id/stop`, `GET/POST /api/statements`, `GET /api/statements/:id`, `POST /api/statements/:id/cancel`.
+`POST /api/reports/:id/stop`, `GET/POST /api/statements`, `GET /api/statements/:id`, `POST /api/statements/:id/cancel`, `GET /api/activity`,
+`GET /api/activity/latest`, `GET /api/activity/running`, `GET /api/activity/totals`, `GET /api/activity/runs`.

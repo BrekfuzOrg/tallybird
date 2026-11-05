@@ -6,3 +6,5 @@ form { display: grid; gap: 10px; max-width: 420px; margin: 12px 0; } label { dis
 button, .button { padding: 7px 12px; background: #0b6b5d; color: #fff; border: 0; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; }
 .badge { background: #e4f4f1; color: #0b6b5d; padding: 1px 8px; border-radius: 10px; font-size: 13px; } #flash.good { color: #0b6b5d; } #flash.bad { color: #b3261e; } dl { display: grid; grid-template-columns: 120px 1fr; gap: 4px; }
 .summary { margin: 12px 0; } form.inline { display: inline; margin: 0; } button.textlink { background: none; border: 0; padding: 0; border-radius: 0; font: inherit; color: inherit; text-decoration: underline; display: inline; }
+ul.feed > li { margin: 8px 0; } ul.feed ul, ul.running { margin: 4px 0; }
+details summary { cursor: pointer; } .panel { background: #fff; padding: 4px 12px; border: 1px solid #e2e6ec; border-radius: 4px; }

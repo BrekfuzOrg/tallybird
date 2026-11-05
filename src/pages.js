@@ -2,6 +2,7 @@ import express from 'express';
 import { one, q } from './db.js';
 import { requireTeam, requireUser, requireAdmin } from './auth.js';
 import { PREVIEW_LINES, reportsLeft } from './reports.js';
+import { activityGroups, runningNow, runsPanel, totalsPanel } from './activity.js';
 
 export const pages = express.Router();
 pages.param('id', (_req, res, next, id) => (/^\d{1,9}$/.test(id) ? next() : res.redirect('/')));
@@ -12,7 +13,7 @@ const kb = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1
 const statusWord = { open: 'Open', processing: 'Processing', paid: 'Paid', running: 'Running', done: 'Done', failed: 'Failed' };
 
 function shell(req, title, body, { nav = true } = {}) {
-  const links = req.team ? `<a href="/customers">Customers</a><a href="/billing">Billing</a><a href="/invoices">Invoices</a><a href="/reports">Reports</a><a href="/statements">Statements</a><a href="/documents">Documents</a><a href="/team">Team</a><a href="/settings">Settings</a>` : '';
+  const links = req.team ? `<a href="/customers">Customers</a><a href="/billing">Billing</a><a href="/invoices">Invoices</a><a href="/reports">Reports</a><a href="/statements">Statements</a><a href="/activity">Activity</a><a href="/documents">Documents</a><a href="/team">Team</a><a href="/settings">Settings</a>` : '';
   const who = req.user ? `<span class="who">${esc(req.user.name)}${req.team ? ` · ${esc(req.team.name)}` : ''}</span><button data-post="/api/logout" data-then="/login">Sign out</button>` : `<a href="/login">Sign in</a>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · Tallybird</title><link rel="stylesheet" href="/app.css"></head>
 <body>${nav ? `<header><a class="brand" href="/">Tallybird</a><nav>${links}</nav><div class="right">${who}</div></header>` : ''}<main><div id="flash" role="status"></div><h1>${esc(title)}</h1>${body}</main><script src="/app.js"></script></body></html>`;
@@ -117,6 +118,15 @@ pages.get('/statements/:id', requireTeam, async (req, res) => {
   const run = await one('SELECT * FROM statement_runs WHERE id = $1 AND team_id = $2', [req.params.id, req.team.id]);
   if (!run) return res.status(404).send(shell(req, 'Not found', '<p>No such statements run. <a href="/statements">Back to statements</a></p>'));
   res.send(shell(req, `Statements for ${run.period}`, `<table><thead><tr><th>Customer</th><th>Open invoices</th><th>Amount due</th></tr></thead><tbody>${run.statements.map((x) => `<tr><td>${esc(x.customer)}</td><td>${x.openInvoices}</td><td>${money(x.dueCents)}</td></tr>`).join('')}</tbody></table><p><a href="/statements">Back to statements</a></p>`));
+});
+
+pages.get('/activity', requireTeam, async (req, res) => {
+  const [groups, running, totals, runs] = await Promise.all([activityGroups(req.team.id), runningNow(req.team.id), totalsPanel(req.team.id), runsPanel(req.team.id)]);
+  res.send(shell(req, 'Activity', `<p>What happened on your team, oldest first. This page keeps itself up to date while it is open.</p>
+  <h2>Running now</h2><ul class="running" data-running="/api/activity/running">${(running.length ? running : ['Nothing is running.']).map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+  <h2>Your team</h2><div class="panel" data-panel="/api/activity/totals">${totals}</div>
+  <h2>Reports and statements</h2><div class="panel" data-panel="/api/activity/runs">${runs}</div>
+  <h2>Activity</h2><ul class="feed" data-feed="/api/activity/latest">${groups.map((g) => `<li><b>${esc(g.title)}</b><ul>${g.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></li>`).join('') || '<li>Nothing yet.</li>'}</ul>`));
 });
 
 pages.get('/team', requireTeam, async (req, res) => {
