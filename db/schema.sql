@@ -102,3 +102,26 @@ CREATE TABLE IF NOT EXISTS invoice_attachments (
   line_items jsonb NOT NULL DEFAULT '[]',
   created_at timestamptz NOT NULL
 );
+CREATE TABLE IF NOT EXISTS late_fees (
+  id serial PRIMARY KEY,
+  invoice_id integer NOT NULL REFERENCES invoices(id),
+  team_id integer NOT NULL REFERENCES teams(id),
+  fee_date date NOT NULL,
+  amount_cents integer NOT NULL,
+  created_at timestamptz NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invoice_reminders (
+  invoice_id integer NOT NULL REFERENCES invoices(id),
+  day date NOT NULL,
+  created_at timestamptz NOT NULL,
+  PRIMARY KEY (invoice_id, day)
+);
+CREATE TABLE IF NOT EXISTS invoice_emails (
+  id serial PRIMARY KEY,
+  invoice_id integer NOT NULL REFERENCES invoices(id),
+  kind text NOT NULL CHECK (kind IN ('invoice', 'late-fee', 'reminder')),
+  to_email text NOT NULL,
+  subject text NOT NULL,
+  message_id text UNIQUE,
+  created_at timestamptz NOT NULL
+);

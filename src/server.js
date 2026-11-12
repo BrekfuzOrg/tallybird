@@ -10,10 +10,13 @@ import { invoicesApi } from './routes/invoices.js';
 import { billingApi } from './routes/billing.js';
 import { documentsApi } from './routes/documents.js';
 import { adminApi } from './routes/admin.js';
+import { cronApi } from './routes/cron.js';
+import { queueApi } from './routes/queue.js';
 import { pages } from './pages.js';
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+// The queue's routes check QStash's signature against the exact bytes it sent.
+app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(new URL('../public', import.meta.url).pathname));
@@ -40,6 +43,8 @@ app.use('/api/invoices', wrap(invoicesApi));
 app.use('/api/billing-runs', wrap(billingApi));
 app.use('/api/documents', wrap(documentsApi));
 app.use('/api/admin', wrap(adminApi));
+app.use('/api/cron', wrap(cronApi));
+app.use('/api/queue', wrap(queueApi));
 app.use('/', wrap(pages));
 
 app.use((err, _req, res, _next) => {

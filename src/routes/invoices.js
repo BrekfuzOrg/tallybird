@@ -2,6 +2,7 @@ import express from 'express';
 import { one, q, now } from '../db.js';
 import { requireOwner, requireTeam, requireUser } from '../auth.js';
 import { charge } from '../gateway.js';
+import { enqueue } from '../queue.js';
 import { BadFile, MAX_ATTACHMENT_BYTES, kindOf, looksLikePdf, readLineItems, receiveFile } from '../attachments.js';
 
 export const invoicesApi = express.Router();
@@ -27,17 +28,28 @@ invoicesApi.get('/:id', async (req, res) => {
   );
   if (!invoice) return res.status(404).json({ error: 'No such invoice' });
   const charges = await q('SELECT id, gateway_ref, amount_cents, created_at FROM charges WHERE invoice_id = $1 ORDER BY id', [invoice.id]);
-  res.json({ invoice, charges });
+  const lateFees = await q('SELECT id, fee_date, amount_cents FROM late_fees WHERE invoice_id = $1 ORDER BY id', [invoice.id]);
+  const emails = await q('SELECT id, kind, to_email, subject, created_at FROM invoice_emails WHERE invoice_id = $1 ORDER BY id', [invoice.id]);
+  res.json({ invoice, charges, lateFees, emails });
 });
 
 invoicesApi.post('/:id/pay', requireTeam, requireOwner, async (req, res) => {
   const invoice = await one('SELECT * FROM invoices WHERE id = $1 AND team_id = $2', [req.params.id, req.team.id]);
   if (!invoice) return res.status(404).json({ error: 'No such invoice' });
   if (invoice.status === 'paid') return res.status(409).json({ error: 'This invoice is already paid' });
-  const { ref } = await charge({ amountCents: invoice.total_cents, description: invoice.number, idempotencyKey: req.get('idempotency-key') });
-  await q('INSERT INTO charges (invoice_id, gateway_ref, amount_cents, created_at) VALUES ($1,$2,$3,$4)', [invoice.id, ref, invoice.total_cents, now()]);
+  const [{ fees }] = await q('SELECT coalesce(sum(amount_cents), 0)::int AS fees FROM late_fees WHERE invoice_id = $1', [invoice.id]);
+  const amountCents = invoice.total_cents + fees;
+  const { ref } = await charge({ amountCents, description: invoice.number, idempotencyKey: req.get('idempotency-key') });
+  await q('INSERT INTO charges (invoice_id, gateway_ref, amount_cents, created_at) VALUES ($1,$2,$3,$4)', [invoice.id, ref, amountCents, now()]);
   await q(`UPDATE invoices SET status = 'processing' WHERE id = $1`, [invoice.id]);
   res.json({ ok: true, status: 'processing' });
+});
+
+invoicesApi.post('/:id/send', requireTeam, async (req, res) => {
+  const invoice = await one('SELECT i.id, i.number, c.email FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE i.id = $1 AND i.team_id = $2', [req.params.id, req.team.id]);
+  if (!invoice) return res.status(404).json({ error: 'No such invoice' });
+  await enqueue('/api/queue/send-invoice', { invoiceId: invoice.id, kind: 'invoice' });
+  res.status(202).json({ ok: true, message: `Invoice ${invoice.number} will be emailed to ${invoice.email}` });
 });
 
 invoicesApi.param('aid', (_req, res, next, id) => (/^\d{1,9}$/.test(id) ? next() : res.status(404).json({ error: 'Not found' })));

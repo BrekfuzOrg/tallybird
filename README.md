@@ -36,6 +36,17 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
 - **Pricing**: seats x price per seat, with a 10% volume discount at 100 seats or more, then 8% tax on the discounted amount.
 - **Payments**: *Pay now* on an open invoice charges the customer once. The invoice shows *Processing* until the gateway
   settles it (about 20 seconds), then *Paid*. Send an `Idempotency-Key` header when calling the API.
+- **Late fees**: an invoice is due 30 days after it is issued. Once a day Tallybird adds a $5.00 late fee to each open
+  invoice past its due date, at most one fee per invoice per day, and emails the customer a notice. *Pay now* charges the
+  invoice's total plus its late fees.
+- **Emails**: *Email invoice to customer* on the invoice page sends it, and each past-due invoice gets one reminder a day.
+  With `QSTASH_TOKEN` and its two signing keys set, every email goes through Upstash QStash, which calls
+  `/api/queue/send-invoice` at `APP_URL` and retries it until it answers; that route answers only QStash's signed deliveries,
+  and a delivery QStash retries is sent once. Without QStash (local development) emails go out at once. The invoice page
+  lists every email sent (this version writes the email itself to the server log).
+- **Scheduled jobs**: `vercel.json` runs `/api/cron/late-fees` (07:00 UTC) and `/api/cron/reminders` (16:00 UTC) once a
+  day, each with `Authorization: Bearer $CRON_SECRET`; anyone else gets a 401. Elsewhere, call them from your own scheduler
+  the same way.
 - **Attachments**: anyone on the team can attach a file to one of the team's invoices from the invoice page, up to 5 MB
   a file. A CSV of line items (a header row with `description`, `quantity` and `amount`, as a spreadsheet saves it) adds its
   rows to the invoice page as line items. A PDF is kept as the invoice's receipt: Tallybird does not read inside a PDF, so a
@@ -55,5 +66,7 @@ JSON under `/api`, signed in with the session cookie from `POST /api/login` (`{"
 `POST /api/signup`, `GET /api/me`, `GET/PATCH /api/team`, `GET/POST /api/team/invites`, `GET/POST /api/customers`,
 `PATCH /api/customers/:id`, `GET /api/invoices`, `GET /api/invoices/:id`, `POST /api/invoices/:id/pay`,
 `POST /api/invoices/:id/attachments` (multipart form, one `file` field), `GET /api/invoices/:id/attachments/:aid`,
-`GET/POST /api/billing-runs`, `GET /api/billing-runs/:id`, `GET/POST /api/documents`, `GET/PATCH/DELETE /api/documents/:id`,
-`POST /api/documents/:id/share`, `POST /api/documents/:id/comments`.
+`POST /api/invoices/:id/send`, `GET/POST /api/billing-runs`, `GET /api/billing-runs/:id`, `GET/POST /api/documents`,
+`GET/PATCH/DELETE /api/documents/:id`, `POST /api/documents/:id/share`, `POST /api/documents/:id/comments`.
+Called by machines, not people: `GET /api/cron/late-fees` and `GET /api/cron/reminders` (the scheduler, with `CRON_SECRET`),
+`POST /api/queue/send-invoice` (QStash, signed).
