@@ -1,6 +1,7 @@
 import express from 'express';
 import { one, q, now } from '../db.js';
 import { requireTeam } from '../auth.js';
+import { documentSummary, whatsNew } from '../summaries.js';
 
 export const documentsApi = express.Router();
 documentsApi.use(requireTeam);
@@ -30,7 +31,7 @@ documentsApi.get('/', async (req, res) => {
      ORDER BY d.updated_at DESC`,
     [req.team.id, req.user.id, workingSetSince()],
   );
-  res.json({ documents: docs.map((d) => publicDoc(d, req.user.id)) });
+  res.json({ documents: docs.map((d) => publicDoc(d, req.user.id)), whatsNew: await whatsNew(req.user.id, docs) });
 });
 
 documentsApi.post('/', async (req, res) => {
@@ -47,7 +48,7 @@ documentsApi.post('/', async (req, res) => {
 documentsApi.get('/:id', async (req, res) => {
   const doc = await readable(req, req.params.id);
   if (!doc) return res.status(404).json({ error: 'No such document' });
-  res.json({ document: publicDoc(doc, req.user.id) });
+  res.json({ document: { ...publicDoc(doc, req.user.id), summary: await documentSummary(doc) } });
 });
 
 documentsApi.patch('/:id', async (req, res) => {

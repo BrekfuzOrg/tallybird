@@ -55,6 +55,11 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
 - **Documents** live with the team. A document is private to its author until the author shares it, either with named
   teammates or with the whole team; a document shared with the team shows up in every teammate's Documents list.
   Comments are open to everyone who can see the document.
+- **Summaries**: with `OPENAI_API_KEY` set, a document opens with a one-line summary written by OpenAI, kept until the
+  document changes, and the Documents list opens with a one-line "what's new" (refreshed at most every 30 seconds). Tallybird
+  starts at most about six summary calls a second, well inside OpenAI's rate limit. If OpenAI is slow or down, a document still
+  opens, within about 10 seconds, without its summary, and the list without its line; both come back on their own as soon as
+  OpenAI does.
 - **Trash**: a document in the trash is removed for good 30 days after it was trashed. Documents that are not in the trash
   are kept for as long as the team exists, however old they are.
 - **Roles**: members can see customers and invoices and write documents. Billing runs, payments and team settings are for
@@ -68,5 +73,6 @@ JSON under `/api`, signed in with the session cookie from `POST /api/login` (`{"
 `POST /api/invoices/:id/attachments` (multipart form, one `file` field), `GET /api/invoices/:id/attachments/:aid`,
 `POST /api/invoices/:id/send`, `GET/POST /api/billing-runs`, `GET /api/billing-runs/:id`, `GET/POST /api/documents`,
 `GET/PATCH/DELETE /api/documents/:id`, `POST /api/documents/:id/share`, `POST /api/documents/:id/comments`.
+`GET /api/documents/:id` carries the document's `summary` and `GET /api/documents` its `whatsNew` line (null when there is none).
 Called by machines, not people: `GET /api/cron/late-fees` and `GET /api/cron/reminders` (the scheduler, with `CRON_SECRET`),
 `POST /api/queue/send-invoice` (QStash, signed).

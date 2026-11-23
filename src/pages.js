@@ -67,7 +67,7 @@ pages.get('/invoices/:id', requireUser, async (req, res) => {
 
 pages.get('/documents', requireTeam, async (req, res) => {
   const r = await fetchSelf(req, '/api/documents');
-  res.send(shell(req, 'Documents', `<ul class="docs">${r.documents.map((d) => `<li><a href="/documents/${d.id}">${esc(d.title)}</a>${d.sharedWithTeam ? ' <span class="badge">Shared with team</span>' : ''}</li>`).join('') || '<li>No documents yet.</li>'}</ul>
+  res.send(shell(req, 'Documents', `${r.whatsNew ? `<p class="summary">${esc(r.whatsNew)}</p>` : ''}<ul class="docs">${r.documents.map((d) => `<li><a href="/documents/${d.id}">${esc(d.title)}</a>${d.sharedWithTeam ? ' <span class="badge">Shared with team</span>' : ''}</li>`).join('') || '<li>No documents yet.</li>'}</ul>
   <h2>New document</h2><form data-api="POST /api/documents" data-then="/documents"><label>Title <input name="title" required></label><label>Text <textarea name="body" rows="5"></textarea></label><button type="submit">Create document</button></form>`));
 });
 
@@ -79,7 +79,7 @@ pages.get('/documents/:id', requireTeam, async (req, res) => {
   <h2>Share</h2><button data-post="/api/documents/${d.id}/share" data-body='{"team":true}' data-then="/documents/${d.id}">Share with team</button>
   <form data-api="POST /api/documents/${d.id}/share" data-then="/documents/${d.id}"><label>Share with a teammate <input name="email" type="email" required></label><button type="submit">Share</button></form>
   <button data-post="/api/documents/${d.id}" data-method="DELETE" data-then="/documents">Move to trash</button>` : `<p>${esc(d.body)}</p>`;
-  res.send(shell(req, d.title, `${d.sharedWithTeam ? '<p class="badge">Shared with team</p>' : ''}${mine}<h2>Comments</h2><ul>${d.comments.map((c) => `<li><b>${esc(c.author)}</b>: ${esc(c.text)}</li>`).join('') || '<li>No comments yet.</li>'}</ul>
+  res.send(shell(req, d.title, `${d.summary ? `<p class="summary">${esc(d.summary)}</p>` : ''}${d.sharedWithTeam ? '<p class="badge">Shared with team</p>' : ''}${mine}<h2>Comments</h2><ul>${d.comments.map((c) => `<li><b>${esc(c.author)}</b>: ${esc(c.text)}</li>`).join('') || '<li>No comments yet.</li>'}</ul>
   <form data-api="POST /api/documents/${d.id}/comments" data-then="/documents/${d.id}"><label>Add a comment <textarea name="text" rows="2" required></textarea></label><button type="submit">Comment</button></form><p><a href="/documents">Back to documents</a></p>`));
 });
 
