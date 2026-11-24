@@ -1,0 +1,12 @@
+# Tallybird
+
+> Invoicing for small teams: customers, billing runs, invoices, payments and shared documents. A REST API under /api/v1 and an MCP server at /mcp let your scripts and AI agents use it with an API key (Authorization: Bearer tb_..., made on Settings, API keys after signing up at /signup).
+
+## Docs
+
+- [API docs and quickstart](/docs.md): sign up, make an API key, call the REST API or the MCP server
+- [OpenAPI description](/openapi.json): every /api/v1 operation (customers, invoices, documents)
+
+## MCP
+
+- [MCP server](/mcp): streamable HTTP, JSON answers, no sessions; tools create_invoice, list_invoices, refund_payment, get_customer

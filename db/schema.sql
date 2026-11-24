@@ -125,3 +125,27 @@ CREATE TABLE IF NOT EXISTS invoice_emails (
   message_id text UNIQUE,
   created_at timestamptz NOT NULL
 );
+-- 0.10: the public API (/api/v1) and the MCP server (/mcp): one-off invoices in a currency, API keys, refunds.
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'usd';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS api_keys (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL REFERENCES users(id),
+  team_id integer NOT NULL REFERENCES teams(id),
+  name text NOT NULL,
+  prefix text NOT NULL,
+  key_hash text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL,
+  last_used_at timestamptz,
+  revoked_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS refunds (
+  id serial PRIMARY KEY,
+  invoice_id integer NOT NULL REFERENCES invoices(id),
+  charge_id integer NOT NULL UNIQUE REFERENCES charges(id),
+  gateway_ref text NOT NULL,
+  amount_cents integer NOT NULL,
+  reason text NOT NULL DEFAULT '',
+  created_by integer REFERENCES users(id),
+  created_at timestamptz NOT NULL
+);

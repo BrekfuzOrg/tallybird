@@ -98,3 +98,6 @@ documentsApi.post('/:id/comments', async (req, res) => {
   await q('UPDATE documents SET comments = $2, updated_at = $3 WHERE id = $1', [doc.id, JSON.stringify([...doc.comments, comment]), now()]);
   res.status(201).json({ comment });
 });
+
+/* The public API (src/routes/v1.js) reads documents the same way the app does. */
+export { readable, workingSetSince };

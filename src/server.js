@@ -12,6 +12,10 @@ import { documentsApi } from './routes/documents.js';
 import { adminApi } from './routes/admin.js';
 import { cronApi } from './routes/cron.js';
 import { queueApi } from './routes/queue.js';
+import { apiKeysApi } from './routes/api-keys.js';
+import { v1Api } from './routes/v1.js';
+import { mcpServer } from './mcp.js';
+import { docsPages } from './docs.js';
 import { pages } from './pages.js';
 
 const app = express();
@@ -36,6 +40,10 @@ app.get('/healthz', async (_req, res) => {
   try { await q('SELECT 1'); res.json({ status: 'ok' }); } catch { res.status(503).json({ status: 'down' }); }
 });
 app.use(loadUser);
+// The public API and the MCP server, for customers' scripts and agents: signed in with an API key, not the session.
+app.use('/api/v1', wrap(v1Api));
+app.use('/mcp', wrap(mcpServer));
+app.use('/api/api-keys', wrap(apiKeysApi));
 app.use('/api', wrap(authApi));
 app.use('/api/team', wrap(teamApi));
 app.use('/api/customers', wrap(customersApi));
@@ -45,9 +53,12 @@ app.use('/api/documents', wrap(documentsApi));
 app.use('/api/admin', wrap(adminApi));
 app.use('/api/cron', wrap(cronApi));
 app.use('/api/queue', wrap(queueApi));
+app.use('/', wrap(docsPages));
 app.use('/', wrap(pages));
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
+  if (req.originalUrl.startsWith('/mcp') && err.type === 'entity.parse.failed') return res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+  if (req.originalUrl.startsWith('/api/v1') && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request body is not valid JSON' });
   if (err.status >= 400 && err.status < 500) return res.status(err.status).json({ error: 'That request could not be read' });
   console.error(err);
   res.status(500).json({ error: 'Something went wrong' });

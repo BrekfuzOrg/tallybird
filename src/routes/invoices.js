@@ -39,7 +39,7 @@ invoicesApi.post('/:id/pay', requireTeam, requireOwner, async (req, res) => {
   if (invoice.status === 'paid') return res.status(409).json({ error: 'This invoice is already paid' });
   const [{ fees }] = await q('SELECT coalesce(sum(amount_cents), 0)::int AS fees FROM late_fees WHERE invoice_id = $1', [invoice.id]);
   const amountCents = invoice.total_cents + fees;
-  const { ref } = await charge({ amountCents, description: invoice.number, idempotencyKey: req.get('idempotency-key') });
+  const { ref } = await charge({ amountCents, description: invoice.number, idempotencyKey: req.get('idempotency-key'), currency: invoice.currency });
   await q('INSERT INTO charges (invoice_id, gateway_ref, amount_cents, created_at) VALUES ($1,$2,$3,$4)', [invoice.id, ref, amountCents, now()]);
   await q(`UPDATE invoices SET status = 'processing' WHERE id = $1`, [invoice.id]);
   res.json({ ok: true, status: 'processing' });

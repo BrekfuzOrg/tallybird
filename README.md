@@ -65,6 +65,19 @@ Anyone can sign up at `/signup`; that makes a new team with you as its owner.
 - **Roles**: members can see customers and invoices and write documents. Billing runs, payments and team settings are for
   owners; a member gets a 403 there by design.
 
+## REST API and MCP server
+
+Tallybird has a public REST API under `/api/v1` (customers, invoices, documents) and an MCP server at
+`http://localhost:3000/mcp` (tools `create_invoice`, `list_invoices`, `refund_payment`, `get_customer`), which lets your
+scripts and AI agents use Tallybird as you. Both take an API key made on **Settings → API keys** (it starts with `tb_`),
+sent as `Authorization: Bearer tb_...`. The API docs and a quickstart are at `/docs` (the same as `docs/api.md`, and as
+markdown at `/docs.md`), the OpenAPI description at `/openapi.json`, and a summary for agents at `/llms.txt`.
+
+- **Refunds**: the team owner refunds a paid invoice's payment with the MCP server's `refund_payment`; it goes back to the
+  customer's card in full, and the invoice page lists it. Refunding twice refunds once.
+- **Currencies**: an invoice made through the API is in `usd`, `eur`, `gbp` or `cad` (`usd` when none is given); any other
+  currency is refused.
+
 ## API
 
 JSON under `/api`, signed in with the session cookie from `POST /api/login` (`{"email","password"}`).

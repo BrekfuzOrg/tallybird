@@ -6,7 +6,8 @@ export const pages = express.Router();
 pages.param('id', (_req, res, next, id) => (/^\d{1,9}$/.test(id) ? next() : res.redirect('/')));
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const money = (cents) => `$${(Number(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const SYMBOL = { usd: '$', eur: '€', gbp: '£', cad: 'CA$' };
+const money = (cents, currency = 'usd') => `${SYMBOL[currency] ?? `${String(currency).toUpperCase()} `}${(Number(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const kb = (bytes) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 const statusWord = { open: 'Open', processing: 'Processing', paid: 'Paid', running: 'Running', done: 'Done', failed: 'Failed' };
 
@@ -22,7 +23,7 @@ pages.get('/', (req, res) => res.redirect(req.user ? (req.team ? '/billing' : '/
 pages.get('/login', (req, res) => res.send(shell(req, 'Sign in', `
   <form data-api="POST /api/login" data-then="/"><label>Email <input name="email" type="email" required autocomplete="username"></label>
   <label>Password <input name="password" type="password" required autocomplete="current-password"></label><button type="submit">Sign in</button></form>
-  <p>New here? <a href="/signup">Create an account</a></p>`)));
+  <p>New here? <a href="/signup">Create an account</a></p><p>Building on Tallybird? See the <a href="/docs">API docs</a>.</p>`)));
 
 pages.get('/signup', (req, res) => res.send(shell(req, 'Create your account', `
   <form data-api="POST /api/signup" data-then="/"><input type="hidden" name="invite" value="${esc(req.query.invite)}">
@@ -45,7 +46,7 @@ pages.get('/billing', requireTeam, async (req, res) => {
 
 pages.get('/invoices', requireTeam, async (req, res) => {
   const rows = await q(`SELECT i.*, c.name AS customer_name FROM invoices i JOIN customers c ON c.id = i.customer_id WHERE i.team_id = $1 ORDER BY i.id DESC LIMIT 100`, [req.team.id]);
-  res.send(shell(req, 'Invoices', `<table><thead><tr><th>Number</th><th>Customer</th><th>Period</th><th>Total</th><th>Status</th></tr></thead><tbody>${rows.map((i) => `<tr><td><a href="/invoices/${i.id}">${esc(i.number)}</a></td><td>${esc(i.customer_name)}</td><td>${esc(i.period)}</td><td>${money(i.total_cents)}</td><td>${statusWord[i.status]}</td></tr>`).join('')}</tbody></table>`));
+  res.send(shell(req, 'Invoices', `<table><thead><tr><th>Number</th><th>Customer</th><th>Period</th><th>Total</th><th>Status</th></tr></thead><tbody>${rows.map((i) => `<tr><td><a href="/invoices/${i.id}">${esc(i.number)}</a></td><td>${esc(i.customer_name)}</td><td>${esc(i.period)}</td><td>${money(i.total_cents, i.currency)}</td><td>${statusWord[i.status]}</td></tr>`).join('')}</tbody></table>`));
 });
 
 pages.get('/invoices/:id', requireUser, async (req, res) => {
@@ -55,13 +56,15 @@ pages.get('/invoices/:id', requireUser, async (req, res) => {
   const fees = await q('SELECT fee_date, amount_cents FROM late_fees WHERE invoice_id = $1 ORDER BY id', [i.id]);
   const feeCents = fees.reduce((n, f) => n + f.amount_cents, 0);
   const emails = await q('SELECT kind, to_email, subject, created_at FROM invoice_emails WHERE invoice_id = $1 ORDER BY id', [i.id]);
+  const refunds = await q('SELECT amount_cents, reason, created_at FROM refunds WHERE invoice_id = $1 ORDER BY id', [i.id]);
+  const m = (cents) => money(cents, i.currency);
   const pay = req.team?.role === 'owner' && req.team.id === i.team_id && i.status !== 'paid' ? `<button data-post="/api/invoices/${i.id}/pay" data-then="/invoices/${i.id}">Pay now</button>` : '';
   const files = await q('SELECT id, filename, kind, bytes, line_items FROM invoice_attachments WHERE invoice_id = $1 ORDER BY id', [i.id]);
   const items = (list) => (list.length ? `<table><thead><tr><th>Line item</th><th>Quantity</th><th>Amount</th></tr></thead><tbody>${list.slice(0, 50).map((x) => `<tr><td>${esc(x.description)}</td><td>${esc(x.quantity)}</td><td>${money(x.amountCents)}</td></tr>`).join('')}</tbody></table>${list.length > 50 ? `<p>and ${list.length - 50} more line items</p>` : ''}` : '<p>No line items.</p>');
   const attach = req.team?.id === i.team_id ? `<form data-upload="/api/invoices/${i.id}/attachments" data-then="/invoices/${i.id}"><label>Attach a CSV of line items or a PDF receipt (up to 5 MB) <input name="file" type="file" accept=".csv,.pdf,text/csv,application/pdf" required></label><button type="submit">Attach file</button></form>` : '';
   const attachments = `<h2>Attachments</h2>${files.length ? `<ul class="attachments">${files.map((f) => `<li><a href="/api/invoices/${i.id}/attachments/${f.id}">${esc(f.filename)}</a> · ${f.kind === 'csv' ? 'Line items (CSV)' : 'Receipt (PDF)'} · ${kb(f.bytes)}${f.kind === 'csv' ? items(f.line_items) : ''}</li>`).join('')}</ul>` : '<p>No attachments yet.</p>'}${attach}`;
-  res.send(shell(req, `Invoice ${i.number}`, `<dl><dt>Customer</dt><dd>${esc(i.customer_name)} (${esc(i.customer_email)})</dd><dt>Seats</dt><dd>${i.seats} at ${money(i.unit_cents)}</dd><dt>Discount</dt><dd>${money(i.discount_cents)}</dd><dt>Tax</dt><dd>${money(i.tax_cents)}</dd><dt>Total</dt><dd>${money(i.total_cents)}</dd>${feeCents ? `<dt>Late fees</dt><dd>${money(feeCents)} (${fees.length} fee${fees.length === 1 ? '' : 's'} of ${money(fees[0].amount_cents)})</dd><dt>Amount due</dt><dd>${money(i.total_cents + feeCents)}</dd>` : ''}<dt>Status</dt><dd>${statusWord[i.status]}</dd></dl>${pay}
-  <h2>Charges</h2>${charges.length ? `<ul>${charges.map((c) => `<li>${money(c.amount_cents)} on ${new Date(c.created_at).toLocaleString('en-US')} (${esc(c.gateway_ref)})</li>`).join('')}</ul>` : '<p>No charges yet.</p>'}
+  res.send(shell(req, `Invoice ${i.number}`, `<dl><dt>Customer</dt><dd>${esc(i.customer_name)} (${esc(i.customer_email)})</dd>${i.description ? `<dt>For</dt><dd>${esc(i.description)}</dd>` : `<dt>Seats</dt><dd>${i.seats} at ${m(i.unit_cents)}</dd><dt>Discount</dt><dd>${m(i.discount_cents)}</dd><dt>Tax</dt><dd>${m(i.tax_cents)}</dd>`}<dt>Total</dt><dd>${m(i.total_cents)}</dd>${feeCents ? `<dt>Late fees</dt><dd>${m(feeCents)} (${fees.length} fee${fees.length === 1 ? '' : 's'} of ${m(fees[0].amount_cents)})</dd><dt>Amount due</dt><dd>${m(i.total_cents + feeCents)}</dd>` : ''}<dt>Status</dt><dd>${statusWord[i.status]}${refunds.length ? ' · Refunded' : ''}</dd></dl>${pay}
+  <h2>Charges</h2>${charges.length ? `<ul>${charges.map((c) => `<li>${m(c.amount_cents)} on ${new Date(c.created_at).toLocaleString('en-US')} (${esc(c.gateway_ref)})</li>`).join('')}</ul>` : '<p>No charges yet.</p>'}${refunds.length ? `<h2>Refunds</h2><ul>${refunds.map((r) => `<li>${m(r.amount_cents)} refunded on ${new Date(r.created_at).toLocaleString('en-US')}${r.reason ? `: ${esc(r.reason)}` : ''}</li>`).join('')}</ul>` : ''}
   <h2>Emails</h2>${emails.length ? `<ul>${emails.map((m) => `<li>${esc(m.subject)} to ${esc(m.to_email)} on ${new Date(m.created_at).toLocaleString('en-US')}</li>`).join('')}</ul>` : '<p>No emails sent yet.</p>'}${req.team?.id === i.team_id ? `<button data-post="/api/invoices/${i.id}/send" data-then="/invoices/${i.id}">Email invoice to customer</button>` : ''}${attachments}<p><a href="/invoices">Back to invoices</a></p>`));
 });
 
@@ -91,8 +94,19 @@ pages.get('/team', requireTeam, async (req, res) => {
 
 pages.get('/settings', requireTeam, (req, res) => {
   const owner = req.team.role === 'owner';
-  res.send(shell(req, 'Settings', owner ? `<form data-api="PATCH /api/team" data-then="/settings"><label>Team name <input name="name" value="${esc(req.team.name)}" required></label><label>What does your team do? <textarea name="description" rows="3">${esc(req.team.description)}</textarea></label><button type="submit">Save settings</button></form>
-  <h2>Your data</h2><p><a class="button" href="/settings/export">Export workspace data</a></p>` : '<p>Only the team owner can change settings.</p>'));
+  const keys = `<h2>API keys</h2><p>Let your scripts and AI agents use Tallybird as you, through the <a href="/docs">REST API and the MCP server</a>.</p><p><a class="button" href="/settings/api-keys">API keys</a></p>`;
+  res.send(shell(req, 'Settings', (owner ? `<form data-api="PATCH /api/team" data-then="/settings"><label>Team name <input name="name" value="${esc(req.team.name)}" required></label><label>What does your team do? <textarea name="description" rows="3">${esc(req.team.description)}</textarea></label><button type="submit">Save settings</button></form>
+  <h2>Your data</h2><p><a class="button" href="/settings/export">Export workspace data</a></p>` : '<p>Only the team owner can change settings.</p>') + keys));
+});
+
+pages.get('/settings/api-keys', requireTeam, async (req, res) => {
+  const keys = await q('SELECT id, name, prefix, created_at, last_used_at FROM api_keys WHERE user_id = $1 AND team_id = $2 AND revoked_at IS NULL ORDER BY id', [req.user.id, req.team.id]);
+  const when = (t) => (t ? new Date(t).toLocaleString('en-US') : 'Never');
+  res.send(shell(req, 'API keys', `<p>An API key lets a script or an AI agent use Tallybird as you, on ${esc(req.team.name)}, through the <a href="/docs">REST API</a> (<code>/api/v1</code>) and the MCP server (<code>/mcp</code>). Send it as <code>Authorization: Bearer tb_...</code>.</p>
+  <form data-api="POST /api/api-keys" data-reveal="key.secret"><label>Key name <input name="name" placeholder="My agent" maxlength="80"></label><button type="submit">Create key</button></form>
+  <div id="reveal" hidden><label>Your new API key. Copy it now: it is shown only once. <input id="new-key" readonly></label><p><a href="/settings/api-keys">Done</a></p></div>
+  <h2>Your keys</h2>${keys.length ? `<table><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>${keys.map((k) => `<tr><td>${esc(k.name)}</td><td><code>${esc(k.prefix)}</code></td><td>${when(k.created_at)}</td><td>${when(k.last_used_at)}</td><td><button data-post="/api/api-keys/${k.id}" data-method="DELETE" data-then="/settings/api-keys">Revoke</button></td></tr>`).join('')}</tbody></table>` : '<p>No API keys yet.</p>'}
+  <p><a href="/settings">Back to settings</a></p>`));
 });
 
 pages.get('/settings/export', requireTeam, (req, res) => {

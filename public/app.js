@@ -16,6 +16,11 @@ document.addEventListener('submit', async (e) => {
   try {
     const data = await call(method, url, body);
     if (form.dataset.show) { flash(`${location.origin}${pick(data, form.dataset.show)}`); return; }
+    if (form.dataset.reveal) {
+      const box = document.getElementById('reveal'); const field = document.getElementById('new-key');
+      field.value = pick(data, form.dataset.reveal); box.hidden = false; form.hidden = true; field.select();
+      flash(data.message || 'Created'); return;
+    }
     flash('Saved');
     if (form.dataset.then) setTimeout(() => { location.href = form.dataset.then; }, 600);
   } catch (err) { flash(err.message, true); }
